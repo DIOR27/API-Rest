@@ -1,9 +1,8 @@
-import requests
 import spotipy
 import json
 import os
 
-from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
+from spotipy.oauth2 import SpotifyOAuth
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
@@ -74,7 +73,7 @@ def create_user(user: User):
     return {"message": "El usuario se ha creado correctamente", "id": user_id}
 
 
-@app.get("/user/{id}")
+@app.get("/user/{user_id}")
 def get_user(user_id: int):
     """
     Obtiene un usuario por su id.
@@ -91,7 +90,7 @@ def get_user(user_id: int):
     with open(USER_DB, "r") as f:
         users = json.load(f)
         user = next((u for u in users if u["id"] == user_id), None)
-        if user is None:
+        if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         return user
 
@@ -110,7 +109,7 @@ def get_user_list():
         return users
 
 
-@app.put("/user/{id}")
+@app.put("/user/{user_id}")
 def update_user(user_id: int, user: User):
     """
     Actualiza un usuario por su id.
@@ -139,7 +138,7 @@ def update_user(user_id: int, user: User):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
 
-@app.delete("/user/{id}")
+@app.delete("/user/{user_id}")
 def delete_user(user_id: int):
     """
     Elimina un usuario por su id.
@@ -174,13 +173,17 @@ def get_spotify_info():
     Raises:
         HTTPException: Si ocurre un error al obtener los datos de Spotify.
     """
-    
+
     try:
         # Configuración de credenciales de Spotify
-        client_credentials_manager = SpotifyClientCredentials(
-            SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
+        sp = spotipy.Spotify(
+            auth_manager=SpotifyOAuth(
+                client_id=SPOTIFY_CLIENT_ID,
+                client_secret=SPOTIFY_CLIENT_SECRET,
+                redirect_uri="http://localhost:8000/callback",
+                scope="user-top-read user-read-private",
+            )
         )
-        sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
 
         # Obtener información del usuario actual
         current_user = sp.current_user()
