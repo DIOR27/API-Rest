@@ -252,6 +252,38 @@ def get_top_artists(
         )
 
 
+@app.get("/spotify/top-tracks")
+def get_top_tracks(access_token: str, limit: int = 10, time_range: str = "medium_term"):
+    """
+    Obtiene las canciones más escuchadas del usuario autenticado.
+    """
+    # URL del endpoint para obtener las canciones más escuchadas
+    url = "https://api.spotify.com/v1/me/top/tracks"
+
+    # Encabezados de autorización
+    headers = {"Authorization": f"Bearer {access_token}"}
+    params = {"limit": limit, "time_range": time_range}
+
+    # Solicitud GET al endpoint de Spotify
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        tracks_data = response.json()
+        tracks = [
+            {
+                "track_name": track["name"],
+                "artist": track["artists"][0]["name"],
+                "album": track["album"]["name"],
+            }
+            for track in tracks_data["items"]
+        ]
+        return {"top_tracks": tracks}
+    else:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"Error al obtener las canciones: {response.json()}",
+        )
+
+
 @app.get("/spotify/info")
 def get_spotify_info():
     """
@@ -259,26 +291,24 @@ def get_spotify_info():
     """
     global spotify_tokens
 
-    # Obtén la URL de autenticación
-    auth_url = spotify_auth().get("auth_url")
+    if not spotify_tokens:
+        auth_url = spotify_auth().get("auth_url")
+        webbrowser.open(auth_url)
 
-    # Abre la URL en el navegador
-    webbrowser.open(auth_url)
+        timeout = 120  # Tiempo máximo de espera en segundos
+        start_time = time.time()
 
-    # Espera hasta que spotify_tokens tenga valores
-    timeout = 120  # Tiempo máximo de espera en segundos
-    start_time = time.time()
+        while not spotify_tokens:
+            # Si supera el tiempo de espera, lanza una excepción
+            if time.time() - start_time > timeout:
+                raise HTTPException(
+                    status_code=408,
+                    detail="Se agotó el tiempo de espera. No se pudo obtener el tóken de acceso.",
+                )
+            time.sleep(1)  # Espera activa de 1 segundo
 
-    while not spotify_tokens:
-        # Si supera el tiempo de espera, lanza una excepción
-        if time.time() - start_time > timeout:
-            raise HTTPException(
-                status_code=408,
-                detail="Tiempo de espera agotado para obtener los tokens.",
-            )
-        time.sleep(1)  # Espera activa de 1 segundo
-
-    return {"message": "Tokens obtenidos exitosamente.", "tokens": spotify_tokens}
+    access_token = spotify_tokens["access_token"]
+    return {"Artistas más escuchados": get_top_artists(access_token), "Canciones más escuchadas": get_top_tracks(access_token)}
 
 
 if __name__ == "__main__":
