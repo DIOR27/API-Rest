@@ -1,8 +1,8 @@
-import spotipy
+import requests
 import json
 import os
+import base64
 
-from spotipy.oauth2 import SpotifyOAuth
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
@@ -12,6 +12,11 @@ app = FastAPI()
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI")
+SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
+SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
+SPOTIFY_API_URL = "https://api.spotify.com/v1/me/top/artists"
+SCOPE = "user-top-read"
 
 USER_DB = "users.json"
 if not os.path.exists(USER_DB):
@@ -163,68 +168,80 @@ def delete_user(user_id: int):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
 
-@app.get("/spotify_info")
-def get_spotify_info():
+@app.get("/spotify/auth")
+def spotify_auth():
     """
-    Obtiene información de Spotify del usuario actual.
-
-    Devuelve un diccionario con los artistas y canciones más escuchados del usuario actual.
-
-    Raises:
-        HTTPException: Si ocurre un error al obtener los datos de Spotify.
+    Genera la URL para que el usuario autorice la aplicación.
     """
+    auth_url = (
+        f"{SPOTIFY_AUTH_URL}?"
+        f"response_type=code&client_id={SPOTIFY_CLIENT_ID}"
+        f"&redirect_uri={SPOTIFY_REDIRECT_URI}"
+        f"&scope={SCOPE}"
+    )
+    return {"auth_url": auth_url}
 
-    try:
-        # Configuración de credenciales de Spotify
-        sp = spotipy.Spotify(
-            auth_manager=SpotifyOAuth(
-                client_id=SPOTIFY_CLIENT_ID,
-                client_secret=SPOTIFY_CLIENT_SECRET,
-                redirect_uri="http://localhost:8000/callback",
-                scope="user-top-read user-read-private",
-            )
-        )
 
-        # Obtener información del usuario actual
-        current_user = sp.current_user()
+@app.get("/callback")
+def callback(code: str):
+    """
+    Intercambia el código de autorización por un token de acceso.
+    """
+    # Configuración de la solicitud para obtener el token
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": SPOTIFY_REDIRECT_URI,
+        "client_id": SPOTIFY_CLIENT_ID,
+        "client_secret": SPOTIFY_CLIENT_SECRET,
+    }
 
-        # Obtener las canciones más escuchadas del usuario
-        top_tracks = sp.current_user_top_tracks(limit=10, time_range="medium_term")
-
-        # Preparar la información de las canciones
-        tracks_info = []
-        for track in top_tracks["items"]:
-            tracks_info.append(
-                {
-                    "track_name": track["name"],
-                    "artist": track["artists"][0]["name"],
-                }
-            )
-
-        # Obtener los artistas más escuchados
-        top_artists = sp.current_user_top_artists(limit=10, time_range="medium_term")
-
-        # Preparar la información de los artistas
-        artists_info = []
-        for artist in top_artists["items"]:
-            artists_info.append({"artist_name": artist["name"]})
-
-        # Construir la respuesta
-        response = {
-            "user": {
-                "display_name": current_user["display_name"],
-                "spotify_url": current_user["external_urls"]["spotify"],
-            },
-            "top_tracks": tracks_info,
-            "top_artists": artists_info,
+    # Solicitud POST para obtener el token
+    response = requests.post(SPOTIFY_TOKEN_URL, headers=headers, data=data)
+    if response.status_code == 200:
+        token_data = response.json()
+        return {
+            "access_token": token_data["access_token"],
+            "refresh_token": token_data.get("refresh_token"),
+            "expires_in": token_data["expires_in"],
         }
-
-        return response
-
-    except Exception as e:
+    else:
         raise HTTPException(
-            status_code=500, detail=f"Error al obtener datos de Spotify: {e}"
+            status_code=response.status_code,
+            detail=f"Error al obtener el token: {response.json()}",
         )
+
+
+@app.get("/spotify/top-artists")
+def get_top_artists(
+    access_token: str, limit: int = 10, time_range: str = "medium_term"
+):
+    """
+    Obtiene los artistas más escuchados del usuario autenticado.
+    """
+    # Encabezados de autorización
+    headers = {"Authorization": f"Bearer {access_token}"}
+    params = {"limit": limit, "time_range": time_range}
+
+    # Solicitud GET al endpoint de Spotify
+    response = requests.get(SPOTIFY_API_URL, headers=headers, params=params)
+    if response.status_code == 200:
+        artists_data = response.json()
+        artists = [
+            {
+                "name": artist["name"],
+                "genres": artist["genres"],
+            }
+            for artist in artists_data["items"]
+        ]
+        return {"top_artists": artists}
+    else:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"Error al obtener los artistas: {response.json()}",
+        )
+
 
 
 if __name__ == "__main__":
