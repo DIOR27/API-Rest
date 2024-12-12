@@ -1,7 +1,8 @@
 import requests
 import json
 import os
-import base64
+import webbrowser
+import time
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -17,6 +18,8 @@ SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_URL = "https://api.spotify.com/v1/me/top/artists"
 SCOPE = "user-top-read"
+
+spotify_tokens = {}
 
 USER_DB = "users.json"
 if not os.path.exists(USER_DB):
@@ -187,6 +190,9 @@ def callback(code: str):
     """
     Intercambia el código de autorización por un token de acceso.
     """
+
+    global spotify_tokens
+
     # Configuración de la solicitud para obtener el token
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
@@ -201,11 +207,14 @@ def callback(code: str):
     response = requests.post(SPOTIFY_TOKEN_URL, headers=headers, data=data)
     if response.status_code == 200:
         token_data = response.json()
-        return {
+
+        spotify_tokens = {
             "access_token": token_data["access_token"],
             "refresh_token": token_data.get("refresh_token"),
             "expires_in": token_data["expires_in"],
         }
+
+        return spotify_tokens
     else:
         raise HTTPException(
             status_code=response.status_code,
@@ -242,6 +251,34 @@ def get_top_artists(
             detail=f"Error al obtener los artistas: {response.json()}",
         )
 
+
+@app.get("/spotify/info")
+def get_spotify_info():
+    """
+    Abre la URL de autenticación y espera hasta que los tokens estén disponibles.
+    """
+    global spotify_tokens
+
+    # Obtén la URL de autenticación
+    auth_url = spotify_auth().get("auth_url")
+
+    # Abre la URL en el navegador
+    webbrowser.open(auth_url)
+
+    # Espera hasta que spotify_tokens tenga valores
+    timeout = 120  # Tiempo máximo de espera en segundos
+    start_time = time.time()
+
+    while not spotify_tokens:
+        # Si supera el tiempo de espera, lanza una excepción
+        if time.time() - start_time > timeout:
+            raise HTTPException(
+                status_code=408,
+                detail="Tiempo de espera agotado para obtener los tokens.",
+            )
+        time.sleep(1)  # Espera activa de 1 segundo
+
+    return {"message": "Tokens obtenidos exitosamente.", "tokens": spotify_tokens}
 
 
 if __name__ == "__main__":
