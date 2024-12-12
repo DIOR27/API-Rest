@@ -175,7 +175,9 @@ def delete_user(user_id: int):
 @app.get("/spotify/auth")
 def spotify_auth():
     """
-    Genera la URL para que el usuario autorice la aplicación.
+    Genera la URL de autenticación para Spotify.
+
+    Retorna un diccionario con la clave "auth_url" que contiene la URL de autenticación.
     """
     auth_url = (
         f"{SPOTIFY_AUTH_URL}?"
@@ -189,12 +191,24 @@ def spotify_auth():
 @app.get("/callback")
 def callback(code: str):
     """
-    Intercambia el código de autorización por un token de acceso.
-    """
+    Maneja la respuesta de la autenticación de Spotify.
 
+    Este endpoint es llamado por Spotify después de que el usuario concede permiso
+    para acceder a su cuenta. El código de autorización se intercambia por un token
+    de acceso que se utiliza para hacer solicitudes a la API de Spotify.
+
+    Args:
+        code (str): Código de autorización proporcionado por Spotify.
+
+    Returns:
+        dict: Un diccionario con los tokens de acceso y refresh y el tiempo de
+        expiración del token de acceso.
+
+    Raises:
+        HTTPException: Si ocurre un error al obtener el token de acceso.
+    """
     global spotify_tokens
 
-    # Configuración de la solicitud para obtener el token
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
         "grant_type": "authorization_code",
@@ -204,7 +218,6 @@ def callback(code: str):
         "client_secret": SPOTIFY_CLIENT_SECRET,
     }
 
-    # Solicitud POST para obtener el token
     response = requests.post(SPOTIFY_TOKEN_URL, headers=headers, data=data)
     if response.status_code == 200:
         token_data = response.json()
@@ -229,12 +242,23 @@ def get_top_artists(
 ):
     """
     Obtiene los artistas más escuchados del usuario autenticado.
+
+    Args:
+        access_token (str): El token de acceso del usuario.
+        limit (int, optional): El número de artistas a obtener. Defaults to 10.
+        time_range (str, optional): El rango de tiempo para obtener los artistas
+            más escuchados. Los valores posibles son "short_term", "medium_term"
+            o "long_term". Defaults to "medium_term".
+
+    Returns:
+        dict: Un diccionario con una lista de artistas y sus géneros.
+
+    Raises:
+        HTTPException: Si ocurre un error al obtener los artistas.
     """
-    # Encabezados de autorización
     headers = {"Authorization": f"Bearer {access_token}"}
     params = {"limit": limit, "time_range": time_range}
 
-    # Solicitud GET al endpoint de Spotify
     response = requests.get(SPOTIFY_API_URL, headers=headers, params=params)
     if response.status_code == 200:
         artists_data = response.json()
@@ -255,17 +279,28 @@ def get_top_artists(
 
 @app.get("/spotify/top-tracks")
 def get_top_tracks(access_token: str, limit: int = 10, time_range: str = "medium_term"):
+
     """
     Obtiene las canciones más escuchadas del usuario autenticado.
+
+    Args:
+        access_token (str): El token de acceso del usuario.
+        limit (int, optional): El número de canciones a obtener. Defaults to 10.
+        time_range (str, optional): El rango de tiempo para obtener las canciones
+            más escuchadas. Los valores posibles son "short_term", "medium_term"
+            o "long_term". Defaults to "medium_term".
+
+    Returns:
+        dict: Un diccionario con una lista de canciones y sus detalles.
+
+    Raises:
+        HTTPException: Si ocurre un error al obtener las canciones.
     """
-    # URL del endpoint para obtener las canciones más escuchadas
     url = "https://api.spotify.com/v1/me/top/tracks"
 
-    # Encabezados de autorización
     headers = {"Authorization": f"Bearer {access_token}"}
     params = {"limit": limit, "time_range": time_range}
 
-    # Solicitud GET al endpoint de Spotify
     response = requests.get(url, headers=headers, params=params)
     if response.status_code == 200:
         tracks_data = response.json()
@@ -288,7 +323,18 @@ def get_top_tracks(access_token: str, limit: int = 10, time_range: str = "medium
 @app.get("/spotify/info")
 def get_spotify_info():
     """
-    Abre la URL de autenticación y espera hasta que los tokens estén disponibles.
+    Obtiene la información de las canciones y artistas más escuchados del usuario.
+
+    Primero, abre la URL de autenticación de Spotify en el navegador predeterminado.
+    Luego, espera hasta que se obtenga el tóken de acceso y devuelve un diccionario con
+    la información de las canciones y artistas más escuchados.
+
+    Returns:
+        dict: Un diccionario con la información de las canciones y artistas más
+            escuchados.
+
+    Raises:
+        HTTPException: Si ocurre un error al obtener la información.
     """
     global spotify_tokens
 
@@ -296,17 +342,16 @@ def get_spotify_info():
         auth_url = spotify_auth().get("auth_url")
         webbrowser.open(auth_url)
 
-        timeout = 120  # Tiempo máximo de espera en segundos
+        timeout = 120
         start_time = time.time()
 
         while not spotify_tokens:
-            # Si supera el tiempo de espera, lanza una excepción
             if time.time() - start_time > timeout:
                 raise HTTPException(
                     status_code=408,
                     detail="Se agotó el tiempo de espera. No se pudo obtener el tóken de acceso.",
                 )
-            time.sleep(1)  # Espera activa de 1 segundo
+            time.sleep(1)
 
     access_token = spotify_tokens["access_token"]
     return {
