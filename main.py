@@ -32,6 +32,7 @@ class User(BaseModel):
     email: str
     preferences: list[str]
 
+
 def new_id():
     """
     Devuelve el próximo id disponible para un usuario.
@@ -85,13 +86,13 @@ def create_user(user: User):
 def get_user(user_id: int):
     """
     Obtiene un usuario por su id.
-    
+
     Args:
         user_id (int): Identificador único del usuario.
-    
+
     Returns:
         User: El usuario con el id proporcionado.
-    
+
     Raises:
         HTTPException: Si el usuario no existe en la base de datos.
     """
@@ -308,7 +309,10 @@ def get_spotify_info():
             time.sleep(1)  # Espera activa de 1 segundo
 
     access_token = spotify_tokens["access_token"]
-    return {"Artistas más escuchados": get_top_artists(access_token), "Canciones más escuchadas": get_top_tracks(access_token)}
+    return {
+        "Canciones más escuchadas": get_top_tracks(access_token),
+        "Artistas más escuchados": get_top_artists(access_token),
+    }
 
 
 if __name__ == "__main__":
