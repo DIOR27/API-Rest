@@ -279,7 +279,6 @@ def get_top_artists(
 
 @app.get("/spotify/top-tracks")
 def get_top_tracks(access_token: str, limit: int = 10, time_range: str = "medium_term"):
-
     """
     Obtiene las canciones más escuchadas del usuario autenticado.
 
