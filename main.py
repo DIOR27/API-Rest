@@ -1,3 +1,4 @@
+from typing import Optional, Union
 import requests
 import json
 import os
@@ -13,7 +14,7 @@ app = FastAPI()
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI")
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:8000/callback")
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_URL = "https://api.spotify.com/v1/me/top/artists"
@@ -21,16 +22,26 @@ SCOPE = "user-top-read"
 
 spotify_tokens = {}
 
-USER_DB = "users.json"
-if not os.path.exists(USER_DB):
-    with open(USER_DB, "w") as f:
-        json.dump([], f)
+USER_DB = "Tareas/API-Rest/users.json"
+
+def check_file_integrity():
+    """
+    Verifica la integridad del archivo de usuarios.
+
+    Si el archivo de usuarios no existe, lo crea vacío.
+
+    Returns:
+        None
+    """
+    if not os.path.exists(USER_DB):
+        with open(USER_DB, "w") as f:
+            json.dump([], f, indent=4)
 
 
 class User(BaseModel):
     name: str
     email: str
-    preferences: list[str]
+    preferences: list[Union[str, dict]] = []
 
 
 def new_id():
@@ -64,6 +75,8 @@ def create_user(user: User):
     Raises:
         HTTPException: Si el usuario ya existe en la base de datos.
     """
+    check_file_integrity()
+
     user_id = new_id()
     user_dict = user.model_dump()
     user_dict["id"] = user_id
@@ -74,12 +87,13 @@ def create_user(user: User):
             raise HTTPException(
                 status_code=409, detail="El usuario ya existe en el sistema."
             )
+
         users.append(user_dict)
 
     with open(USER_DB, "w") as f:
-        json.dump(users, f)
+        json.dump(users, f, indent=4)
 
-    return {"message": "El usuario se ha creado correctamente", "id": user_id}
+    return {"message": "El usuario se ha creado correctamente", "Usuario": user_dict}
 
 
 @app.get("/user/{user_id}")
@@ -96,6 +110,8 @@ def get_user(user_id: int):
     Raises:
         HTTPException: Si el usuario no existe en la base de datos.
     """
+    check_file_integrity()
+
     with open(USER_DB, "r") as f:
         users = json.load(f)
         user = next((u for u in users if u["id"] == user_id), None)
@@ -112,6 +128,8 @@ def get_user_list():
     Returns:
         list: Una lista de diccionarios representando a cada usuario en la base de datos.
     """
+
+    check_file_integrity()
 
     with open(USER_DB, "r") as f:
         users = json.load(f)
@@ -133,11 +151,13 @@ def update_user(user_id: int, user: User):
     Raises:
         HTTPException: Si el usuario no existe en la base de datos.
     """
+    check_file_integrity()
+
     with open(USER_DB, "r") as f:
         users = json.load(f)
         for i, u in enumerate(users):
             if u["id"] == user_id:
-                updated_user = user.dict(
+                updated_user = user.model_dump(
                     exclude_unset=True
                 )  # Solo actualiza los campos proporcionados
                 users[i].update(updated_user)
@@ -145,7 +165,6 @@ def update_user(user_id: int, user: User):
                     json.dump(users, f)
                 return {"message": "Usuario actualizado correctamente"}
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
 
 @app.delete("/user/{user_id}")
 def delete_user(user_id: int):
@@ -161,6 +180,8 @@ def delete_user(user_id: int):
     Raises:
         HTTPException: Si el usuario no existe en la base de datos.
     """
+    check_file_integrity()
+
     with open(USER_DB, "r") as f:
         users = json.load(f)
         for i, u in enumerate(users):
@@ -319,8 +340,24 @@ def get_top_tracks(access_token: str, limit: int = 10, time_range: str = "medium
         )
 
 
+@app.put("/user/add-preferences/{user_id}/{track}/{artist}")
+def add_preferences(user_id: int, track: str, artist: str):
+
+    access_token = get_spotify_token()
+
+    track_info = search_spotify(access_token, track, artist)
+    user = get_user(user_id)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user["preferences"].append({"track_info": track_info})
+    update_user(user_id, User(**user))
+    return {"message": "Preferencias agregadas correctamente", "Usuario actualizado": user}
+
+
 @app.get("/spotify/info")
-def get_spotify_info():
+def get_spotify_token():
     """
     Obtiene la información de las canciones y artistas más escuchados del usuario.
 
@@ -353,10 +390,33 @@ def get_spotify_info():
             time.sleep(1)
 
     access_token = spotify_tokens["access_token"]
-    return {
-        "Canciones más escuchadas": get_top_tracks(access_token),
-        "Artistas más escuchados": get_top_artists(access_token),
-    }
+    return access_token
+
+@app.get("/spotify/search")
+def search_spotify(access_token: str, track: str, artist: str):
+
+    url = "https://api.spotify.com/v1/search"
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    params = {"q": f"{track} {artist}", "type": "track", "limit": 1}
+
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        search_data = response.json()
+        tracks = [
+            {
+                "track_name": track["name"],
+                "artist": track["artists"][0]["name"],
+                "album": track["album"]["name"],
+            }
+            for track in search_data["tracks"]["items"]
+        ]
+        return tracks
+    else:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"Error al obtener las canciones: {response.json()}",
+        )
 
 
 if __name__ == "__main__":

@@ -1,1 +1,1 @@
-[{"name": "Diego Orellana", "email": "diego@mail.com", "preferences": ["rock", "metal"], "id": 1}]
+[{"name": "Diego Orellana", "email": "diego@mail.coms", "preferences": [{"track_info": [{"track_name": "Fuel", "artist": "Metallica", "album": "Reload"}]}, {"track_info": [{"track_name": "One", "artist": "Metallica", "album": "...And Justice For All"}]}, {"track_info": [{"track_name": "Battery", "artist": "Metallica", "album": "Master Of Puppets (Remastered)"}]}], "id": 1}]
