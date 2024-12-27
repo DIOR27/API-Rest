@@ -1,1 +1,31 @@
-[{"name": "Diego Orellana", "email": "diego@mail.coms", "preferences": [{"track_info": [{"track_name": "Fuel", "artist": "Metallica", "album": "Reload"}]}, {"track_info": [{"track_name": "One", "artist": "Metallica", "album": "...And Justice For All"}]}, {"track_info": [{"track_name": "Battery", "artist": "Metallica", "album": "Master Of Puppets (Remastered)"}]}], "id": 1}]
+[
+    {
+        "name": "Diego Orellana",
+        "email": "diego@mail.coms",
+        "preferences": [
+            {
+                "track_info": [
+                    {
+                        "track_name": "Hate Train",
+                        "artist": "Metallica",
+                        "album": "Beyond Magnetic",
+                        "release_date": "2011-01-01",
+                        "album_type": "single"
+                    }
+                ]
+            },
+            {
+                "track_info": [
+                    {
+                        "track_name": "Blackened",
+                        "artist": "Metallica",
+                        "album": "...And Justice For All",
+                        "release_date": "1988-08-25",
+                        "album_type": "album"
+                    }
+                ]
+            }
+        ],
+        "id": 1
+    }
+]

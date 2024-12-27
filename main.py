@@ -14,7 +14,9 @@ app = FastAPI()
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:8000/callback")
+SPOTIFY_REDIRECT_URI = os.getenv(
+    "SPOTIFY_REDIRECT_URI", "http://localhost:8000/callback"
+)
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_URL = "https://api.spotify.com/v1/me/top/artists"
@@ -23,6 +25,7 @@ SCOPE = "user-top-read"
 spotify_tokens = {}
 
 USER_DB = "Tareas/API-Rest/users.json"
+
 
 def check_file_integrity():
     """
@@ -146,7 +149,7 @@ def update_user(user_id: int, user: User):
         user (User): Información del usuario a actualizar.
 
     Returns:
-        dict: Un diccionario con un mensaje de confirmación.
+        dict: Un diccionario con un mensaje de confirmación y el usuario actualizado.
 
     Raises:
         HTTPException: Si el usuario no existe en la base de datos.
@@ -162,9 +165,42 @@ def update_user(user_id: int, user: User):
                 )  # Solo actualiza los campos proporcionados
                 users[i].update(updated_user)
                 with open(USER_DB, "w") as f:
-                    json.dump(users, f)
-                return {"message": "Usuario actualizado correctamente"}
+                    json.dump(users, f, indent=4)
+                return {"message": "Usuario actualizado correctamente", "Usuario": user}
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+
+@app.put("/user/add_preferences/{user_id}/{track}/{artist}")
+def add_preferences(user_id: int, track: str, artist: str):
+    """
+    Agrega una preferencia musical a un usuario existente.
+
+    Args:
+        user_id (int): El id del usuario a agregar la preferencia.
+        track (str): El nombre de la canción.
+        artist (str): El nombre del artista de la canción.
+
+    Returns:
+        dict: Un diccionario con un mensaje de confirmación y el usuario actualizado.
+
+    Raises:
+        HTTPException: Si el usuario no existe en la base de datos.
+    """
+    access_token = get_spotify_token()
+
+    track_info = get_track_info(access_token, track, artist)
+    user = get_user(user_id)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user["preferences"].append({"track_info": track_info})
+    update_user(user_id, User(**user))
+    return {
+        "message": "Preferencias agregadas correctamente",
+        "Usuario actualizado": user,
+    }
+
 
 @app.delete("/user/{user_id}")
 def delete_user(user_id: int):
@@ -257,6 +293,71 @@ def callback(code: str):
         )
 
 
+@app.get("/spotify/get_token")
+def get_spotify_token():
+    """
+    Obtiene el token de acceso de Spotify.
+
+    Si no se ha autenticado previamente, abre la ventana de autenticación
+    en el navegador predeterminado. Luego, espera hasta que se obtenga el token
+    de acceso y lo devuelve.
+
+    Si no se obtiene el token de acceso en 120 segundos, se lanza una excepción.
+
+    Returns:
+        str: El token de acceso de Spotify.
+    """
+    global spotify_tokens
+
+    if not spotify_tokens:
+        auth_url = spotify_auth().get("auth_url")
+        webbrowser.open(auth_url)
+
+        timeout = 120
+        start_time = time.time()
+
+        while not spotify_tokens:
+            if time.time() - start_time > timeout:
+                raise HTTPException(
+                    status_code=408,
+                    detail="Se agotó el tiempo de espera. No se pudo obtener el tóken de acceso.",
+                )
+            time.sleep(1)
+
+    access_token = spotify_tokens["access_token"]
+
+    return access_token
+
+
+@app.get("/spotify/track_info")
+def get_track_info(access_token: str, track: str, artist: str):
+
+    url = "https://api.spotify.com/v1/search"
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    params = {"q": f"{track} {artist}", "type": "track", "limit": 1}
+
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        search_data = response.json()
+        tracks = [
+            {
+                "track_name": track["name"],
+                "artist": track["artists"][0]["name"],
+                "album": track["album"]["name"],
+                "release_date": track["album"]["release_date"],
+                "album_type": track["album"]["album_type"],
+            }
+            for track in search_data["tracks"]["items"]
+        ]
+        return tracks
+    else:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"Error al obtener las canciones: {response.json()}",
+        )
+
+
 @app.get("/spotify/top-artists")
 def get_top_artists(
     access_token: str, limit: int = 10, time_range: str = "medium_term"
@@ -340,83 +441,14 @@ def get_top_tracks(access_token: str, limit: int = 10, time_range: str = "medium
         )
 
 
-@app.put("/user/add-preferences/{user_id}/{track}/{artist}")
-def add_preferences(user_id: int, track: str, artist: str):
-
+@app.get("/spotify/user_info")
+def get_user_info():
     access_token = get_spotify_token()
 
-    track_info = search_spotify(access_token, track, artist)
-    user = get_user(user_id)
-
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-    user["preferences"].append({"track_info": track_info})
-    update_user(user_id, User(**user))
-    return {"message": "Preferencias agregadas correctamente", "Usuario actualizado": user}
-
-
-@app.get("/spotify/info")
-def get_spotify_token():
-    """
-    Obtiene la información de las canciones y artistas más escuchados del usuario.
-
-    Primero, abre la URL de autenticación de Spotify en el navegador predeterminado.
-    Luego, espera hasta que se obtenga el tóken de acceso y devuelve un diccionario con
-    la información de las canciones y artistas más escuchados.
-
-    Returns:
-        dict: Un diccionario con la información de las canciones y artistas más
-            escuchados.
-
-    Raises:
-        HTTPException: Si ocurre un error al obtener la información.
-    """
-    global spotify_tokens
-
-    if not spotify_tokens:
-        auth_url = spotify_auth().get("auth_url")
-        webbrowser.open(auth_url)
-
-        timeout = 120
-        start_time = time.time()
-
-        while not spotify_tokens:
-            if time.time() - start_time > timeout:
-                raise HTTPException(
-                    status_code=408,
-                    detail="Se agotó el tiempo de espera. No se pudo obtener el tóken de acceso.",
-                )
-            time.sleep(1)
-
-    access_token = spotify_tokens["access_token"]
-    return access_token
-
-@app.get("/spotify/search")
-def search_spotify(access_token: str, track: str, artist: str):
-
-    url = "https://api.spotify.com/v1/search"
-
-    headers = {"Authorization": f"Bearer {access_token}"}
-    params = {"q": f"{track} {artist}", "type": "track", "limit": 1}
-
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code == 200:
-        search_data = response.json()
-        tracks = [
-            {
-                "track_name": track["name"],
-                "artist": track["artists"][0]["name"],
-                "album": track["album"]["name"],
-            }
-            for track in search_data["tracks"]["items"]
-        ]
-        return tracks
-    else:
-        raise HTTPException(
-            status_code=response.status_code,
-            detail=f"Error al obtener las canciones: {response.json()}",
-        )
+    return {
+        "Canciones más escuchadas": get_top_tracks(access_token),
+        "Artistas más escuchados": get_top_artists(access_token),
+    }
 
 
 if __name__ == "__main__":
