@@ -57,6 +57,28 @@
                         "album_type": "album"
                     }
                 ]
+            },
+            {
+                "track_info": [
+                    {
+                        "track_name": "Elizabeth",
+                        "artist": "Ghost",
+                        "album": "Opus Eponymous",
+                        "release_date": "2010",
+                        "album_type": "album"
+                    }
+                ]
+            },
+            {
+                "track_info": [
+                    {
+                        "track_name": "Elizabeth",
+                        "artist": "Ghost",
+                        "album": "Opus Eponymous",
+                        "release_date": "2010",
+                        "album_type": "album"
+                    }
+                ]
             }
         ],
         "id": 1
