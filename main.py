@@ -1,4 +1,3 @@
-from typing import Union
 import requests
 import json
 import os
@@ -44,7 +43,7 @@ def check_file_integrity():
 class User(BaseModel):
     name: str
     email: str
-    preferences: list[Union[str, dict]] = []
+    preferences: list[dict] = []
 
 
 def new_id():

@@ -35,6 +35,28 @@
                         "album_type": "album"
                     }
                 ]
+            },
+            {
+                "track_info": [
+                    {
+                        "track_name": "Blackened",
+                        "artist": "Metallica",
+                        "album": "...And Justice For All",
+                        "release_date": "1988-08-25",
+                        "album_type": "album"
+                    }
+                ]
+            },
+            {
+                "track_info": [
+                    {
+                        "track_name": "10 Years Today",
+                        "artist": "Bullet For My Valentine",
+                        "album": "The Poison (20th Anniversary Edition)",
+                        "release_date": "2024-11-29",
+                        "album_type": "album"
+                    }
+                ]
             }
         ],
         "id": 1
