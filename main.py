@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Union
 import requests
 import json
 import os
@@ -24,7 +24,7 @@ SCOPE = "user-top-read"
 
 spotify_tokens = {}
 
-USER_DB = "Tareas/API-Rest/users.json"
+USER_DB = "users.json"
 
 
 def check_file_integrity():
@@ -186,13 +186,12 @@ def add_preferences(user_id: int, track: str, artist: str):
     Raises:
         HTTPException: Si el usuario no existe en la base de datos.
     """
+
+    user = get_user(user_id)
+
     access_token = get_spotify_token()
 
     track_info = get_track_info(access_token, track, artist)
-    user = get_user(user_id)
-
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     user["preferences"].append({"track_info": track_info})
     update_user(user_id, User(**user))

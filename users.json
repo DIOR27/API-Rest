@@ -24,6 +24,17 @@
                         "album_type": "album"
                     }
                 ]
+            },
+            {
+                "track_info": [
+                    {
+                        "track_name": "Blackened",
+                        "artist": "Metallica",
+                        "album": "...And Justice For All",
+                        "release_date": "1988-08-25",
+                        "album_type": "album"
+                    }
+                ]
             }
         ],
         "id": 1
